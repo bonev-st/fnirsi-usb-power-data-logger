@@ -174,8 +174,10 @@ def test_run_logger_emits_csv_rows():
     t = _FakeTransport(frames)
     buf = io.StringIO()
     sink = CsvSink(buf)
-    # 0.3s is generous for the 100ms startup-drain + some samples.
-    count = run_logger(t, sink, duration_s=0.3, verify_crc=True)
+    # 0.3s is generous for the 100ms startup settle + some samples.
+    # drain_max_ms=50 keeps the test fast even though the fake would otherwise
+    # feed frames forever.
+    count = run_logger(t, sink, duration_s=0.3, verify_crc=True, drain_max_ms=50)
     sink.close()
 
     # Startup sequence was sent.
@@ -190,6 +192,65 @@ def test_run_logger_emits_csv_rows():
     cells = last_line.split(",")
     energy_ws = float(cells[CSV_COLUMNS.index("energy_Ws")])
     assert energy_ws > 0
+
+
+class _TimeoutTransport:
+    """Fake transport that returns None for every read (simulating a hung device).
+
+    Records every write so tests can count them.
+    """
+
+    class _Info:
+        model = Model.FNB58
+
+    info = _Info()
+
+    def __init__(self) -> None:
+        self.writes: list[bytes] = []
+        self.reads_called = 0
+
+    def write(self, frame: bytes) -> None:
+        self.writes.append(frame)
+
+    def read(self, timeout_ms: int = 1000) -> bytes | None:
+        self.reads_called += 1
+        return None
+
+    def close(self) -> None:
+        pass
+
+
+def test_read_timeout_does_not_spam_refresh():
+    """Regression: old code issued a REFRESH on every read timeout, which piled
+    up OUT frames and wedged the device firmware. The periodic cadence is the
+    only source of REFRESH writes now. After N consecutive timeouts the loop
+    raises TransportError instead of looping forever."""
+    t = _TimeoutTransport()
+    buf = io.StringIO()
+    sink = CsvSink(buf)
+    from fnb58_logger.transport import TransportError
+    with pytest.raises(TransportError):
+        run_logger(t, sink, drain_max_ms=50, max_consecutive_timeouts=2)
+    sink.close()
+
+    # Only the three startup writes. No REFRESH-on-timeout spam.
+    assert t.writes == [PROBE_1, PROBE_2, PROBE_2]
+
+
+def test_drain_fifo_runs_on_exit():
+    """run_logger must drain the device IN FIFO in its finally block so the
+    meter doesn't freeze after we disconnect."""
+    t = _TimeoutTransport()
+    buf = io.StringIO()
+    sink = CsvSink(buf)
+    from fnb58_logger.transport import TransportError
+    with pytest.raises(TransportError):
+        run_logger(t, sink, drain_max_ms=50, max_consecutive_timeouts=2)
+    sink.close()
+
+    # The read loop reads at least max_consecutive_timeouts times, then
+    # drain_fifo adds at least one more read on the exception path.
+    assert t.reads_called >= 3
 
 
 def test_row_as_dict_roundtrip():
@@ -207,3 +268,5 @@ def test_row_as_dict_roundtrip():
     d = row.as_dict()
     assert set(d.keys()) == set(CSV_COLUMNS)
     assert d["power_W"] == pytest.approx(5.0)
+    # state defaults to empty string when no marker provider is wired in.
+    assert d["state"] == ""
