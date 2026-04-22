@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fnb58-logger"
+version = "0.1.0"
+description = "Cross-platform CLI logger for FNIRSI FNB58 (and siblings) USB power meters."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "fnb58-logger contributors" }]
+keywords = ["fnirsi", "fnb58", "usb", "power-meter", "logger", "hid"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Hardware",
+    "Topic :: System :: Logging",
+]
+dependencies = [
+    "hid>=1.0.5",
+]
+
+[project.optional-dependencies]
+pyusb = ["pyusb>=1.2"]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+fnb58-log = "fnb58_logger.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/baryluk/fnirsi-usb-power-data-logger"
+Reference = "https://github.com/baryluk/fnirsi-usb-power-data-logger"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

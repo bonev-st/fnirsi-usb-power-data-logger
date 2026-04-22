@@ -1,0 +1,19 @@
+# FNIRSI FNB48 / C1 / FNB58 / FNB48S — grant plugdev read/write on the HID
+# and raw USB interfaces so fnb58-log can run without sudo.
+#
+# Install:
+#   sudo cp 99-fnirsi.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# If your distro doesn't have a "plugdev" group, replace it with your login
+# group (e.g. GROUP="users") or use TAG+="uaccess".
+
+SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="003a", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="003b", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="2e3c", ATTR{idProduct}=="5558", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="2e3c", ATTR{idProduct}=="0049", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="003a", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="003b", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="2e3c", ATTRS{idProduct}=="5558", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="2e3c", ATTRS{idProduct}=="0049", MODE="0660", GROUP="plugdev", TAG+="uaccess"
