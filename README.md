@@ -74,6 +74,26 @@ sudo udevadm trigger
 Then replug the meter. Both backends should work; hidapi talks to
 `/dev/hidraw*`, pyusb talks to the raw interface.
 
+### Raspberry Pi 4 note
+
+The VL805 xHCI controller that drives all four external USB ports on the
+Pi 4 has a silicon/firmware errata that hits full-speed HID devices on
+certain downstream ports. The FNB58 is a full-speed device, so it's
+susceptible. Symptom: the logger opens the device but is stuck on
+`[warn] read timeout; sending refresh`, and `dmesg` shows entries like:
+
+```
+xhci_hcd 0000:01:00.0: ERROR: unexpected setup address command completion code 0x11
+usb 1-1.2: WARN: invalid context state for evaluate context command
+usb 1-1.2: unable to enumerate USB device
+```
+
+This is unfixable from user space and is not avoided by the latest VL805
+firmware or kernel. Workaround: **move the FNB58 to a different physical
+USB port**. The two bottom (black) USB 2 ports tend to avoid the problem;
+the top (blue) USB 3 ports may or may not, depending on the individual
+board's port-to-hub mapping.
+
 ## Development
 
 ```bash
