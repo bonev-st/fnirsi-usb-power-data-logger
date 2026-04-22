@@ -77,9 +77,18 @@ def startup_sequence(model: Model) -> list[bytes]:
 
 
 def refresh_interval_s(model: Model) -> float:
-    """How often to re-send REFRESH to keep the stream flowing."""
-    if model in (Model.FNB58, Model.FNB48S):
-        return 1.0
+    """How often to re-send REFRESH to keep the stream flowing.
+
+    3 ms for every model. Older FNB58 firmware (≤V0.67) tolerated a 1 s
+    cadence and baryluk's reference logger still uses that for FNB58/FNB48S,
+    but newer firmware (≥V0.68, confirmed on V1.11) has a tighter internal
+    watchdog and self-resets when refreshes are too sparse — the device then
+    often needs a physical replug to recover. See:
+    https://github.com/baryluk/fnirsi-usb-power-data-logger/issues/19
+
+    3 ms is the cadence FNB48/C1 have always used, so it's known-good on
+    all four models.
+    """
     return 0.003
 
 

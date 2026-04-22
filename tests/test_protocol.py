@@ -55,12 +55,11 @@ def test_startup_sequence_fnb48_ends_with_refresh():
     assert seq == [PROBE_1, PROBE_2, REFRESH]
 
 
-def test_refresh_interval_fast_for_fnb48():
-    assert refresh_interval_s(Model.FNB48) == pytest.approx(0.003)
-
-
-def test_refresh_interval_slow_for_fnb58():
-    assert refresh_interval_s(Model.FNB58) == pytest.approx(1.0)
+def test_refresh_interval_is_3ms_for_all_models():
+    # All four models now use 3 ms. Newer FNB58 firmware (≥V0.68)
+    # wedges on the old 1 s cadence. See issue #19 upstream.
+    for m in (Model.FNB48, Model.FNB48S, Model.FNB58, Model.C1):
+        assert refresh_interval_s(m) == pytest.approx(0.003)
 
 
 # --- decode_packet -----------------------------------------------------------

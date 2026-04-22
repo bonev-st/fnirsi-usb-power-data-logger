@@ -243,11 +243,15 @@ class SampleStream:
         verify_crc: bool = False,
         on_warn=None,
         max_consecutive_timeouts: int = 3,
+        refresh_period_s: float | None = None,
     ) -> None:
         self._t = transport
         self._verify_crc = verify_crc
         self._on_warn = on_warn or (lambda _msg: None)
-        self._refresh_period = refresh_interval_s(transport.info.model)
+        self._refresh_period = (
+            refresh_period_s if refresh_period_s is not None
+            else refresh_interval_s(transport.info.model)
+        )
         self._max_consecutive_timeouts = max_consecutive_timeouts
 
     def _warn(self, msg: str) -> None:
@@ -337,6 +341,7 @@ def run_logger(
     state_provider: Callable[[], str] | None = None,
     drain_max_ms: int = 2000,
     max_consecutive_timeouts: int = 3,
+    refresh_period_s: float | None = None,
 ) -> int:
     """Drive the transport, emit rows to the sink, return total samples emitted.
 
@@ -352,6 +357,7 @@ def run_logger(
         verify_crc=verify_crc,
         on_warn=on_warn,
         max_consecutive_timeouts=max_consecutive_timeouts,
+        refresh_period_s=refresh_period_s,
     )
 
     t0_wall = time.time()

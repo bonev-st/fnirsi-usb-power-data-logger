@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 import signal
 import sys
 from contextlib import ExitStack
 
 from . import __version__
-from .logger import CsvSink, StatusLine, run_logger
+from .logger import CsvSink, StatusLine, SummaryAccumulator, run_logger
 from .transport import TransportError, open_transport
 
 
@@ -46,6 +47,35 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "-v", "--verbose", action="store_true",
         help="Print device details and warnings to stderr",
+    )
+    p.add_argument(
+        "--summary", action="store_true",
+        help=(
+            "After the run, print a one-line JSON summary "
+            "(mean/median/p95 current, energy, charge, etc.) to stderr — or to "
+            "stdout if CSV is being written to a file."
+        ),
+    )
+    p.add_argument(
+        "--marker-port",
+        help=(
+            "Serial port to read firmware state markers from "
+            "(e.g. COM5 on Windows, /dev/ttyUSB0 on Linux). Lines matching "
+            "'#STATE:NAME' update the current state, which is written to the "
+            "'state' CSV column. Requires pyserial."
+        ),
+    )
+    p.add_argument(
+        "--marker-baud", type=int, default=115200,
+        help="Baud rate for --marker-port (default: 115200)",
+    )
+    p.add_argument(
+        "--refresh-ms", type=float, default=None,
+        help=(
+            "REFRESH write cadence in ms. Default is 3 ms for all models "
+            "(required for FNB58 firmware ≥V0.68 to avoid device wedge). "
+            "Override only if you know what you're doing."
+        ),
     )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
@@ -107,6 +137,26 @@ def main(argv: list[str] | None = None) -> int:
             status = StatusLine(sys.stderr)
             stack.callback(status.finalize)
 
+        summary = SummaryAccumulator() if args.summary else None
+
+        # Optional UART state-marker reader.
+        state_provider = None
+        if args.marker_port:
+            try:
+                from .markers import MarkerReader
+            except ImportError as e:  # pragma: no cover
+                print(f"error: {e}", file=sys.stderr)
+                return 1
+            try:
+                mr = MarkerReader(args.marker_port, baud=args.marker_baud, on_warn=warn)
+                mr.start()
+            except Exception as e:
+                print(f"error: failed to open marker port {args.marker_port}: {e}",
+                      file=sys.stderr)
+                return 1
+            stack.callback(mr.stop)
+            state_provider = mr.current_state
+
         try:
             count = run_logger(
                 transport,
@@ -116,6 +166,11 @@ def main(argv: list[str] | None = None) -> int:
                 duration_s=args.duration,
                 alpha=args.alpha,
                 on_warn=warn,
+                summary=summary,
+                state_provider=state_provider,
+                refresh_period_s=(
+                    args.refresh_ms / 1000.0 if args.refresh_ms is not None else None
+                ),
             )
         except KeyboardInterrupt:
             count = -1  # signal clean interrupt
@@ -128,6 +183,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[info] {count} samples written", file=sys.stderr)
         else:
             print("[info] interrupted", file=sys.stderr)
+
+    if summary is not None:
+        # CSV goes to stdout when -o is absent, so put the summary on stderr
+        # there; when CSV goes to a file, stdout is free for JSON.
+        out = sys.stdout if writing_to_file else sys.stderr
+        out.write(json.dumps(summary.to_dict(), separators=(",", ":")) + "\n")
+        out.flush()
     return 0
 
 
