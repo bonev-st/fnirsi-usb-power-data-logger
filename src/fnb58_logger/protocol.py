@@ -79,16 +79,18 @@ def startup_sequence(model: Model) -> list[bytes]:
 def refresh_interval_s(model: Model) -> float:
     """How often to re-send REFRESH to keep the stream flowing.
 
-    3 ms for every model. Older FNB58 firmware (≤V0.67) tolerated a 1 s
-    cadence and baryluk's reference logger still uses that for FNB58/FNB48S,
-    but newer firmware (≥V0.68, confirmed on V1.11) has a tighter internal
-    watchdog and self-resets when refreshes are too sparse — the device then
-    often needs a physical replug to recover. See:
-    https://github.com/baryluk/fnirsi-usb-power-data-logger/issues/19
+    Default mirrors baryluk's reference: 1 s for FNB58/FNB48S, 3 ms for
+    FNB48/C1. The "3 ms for everything" variant suggested by upstream
+    issue #19 helps some Windows setups but **overwhelms the Pi 4's VL805
+    xHCI USB-2 companion** on Linux (333 writes/s trips the TT, the kernel
+    resets the port, VL805 gets wedged). Users on the ≥V0.68 firmware who
+    see the old 1 s cadence wedge the meter can override this with
+    ``--refresh-ms 3`` from the CLI.
 
-    3 ms is the cadence FNB48/C1 have always used, so it's known-good on
-    all four models.
+    https://github.com/baryluk/fnirsi-usb-power-data-logger/issues/19
     """
+    if model in (Model.FNB58, Model.FNB48S):
+        return 1.0
     return 0.003
 
 
