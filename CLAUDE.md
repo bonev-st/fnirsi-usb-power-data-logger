@@ -38,10 +38,10 @@ and keeping the CLI thin.
 - `src/fnb58_logger/protocol.py` — **pure, hardware-free**. Device ID table,
   CRC-8 (`poly=0x39, init=0x42`), `Sample` dataclass, `decode_packet()`,
   pre-built startup frames (`PROBE_1`, `PROBE_2`, `REFRESH`), and
-  `startup_sequence(model)` (FNB58 needs `PROBE_2` twice; FNB48/C1 ends with
-  `REFRESH`). Refresh cadence also lives here (1 s for FNB58, 3 ms for
-  FNB48/C1). No I/O allowed in this module — keep it that way so tests can
-  assert the full decoder without mocks.
+  `startup_sequence()` (same `PROBE_1 → PROBE_2 → REFRESH` for all models).
+  Refresh cadence also lives here (1 s for FNB58/FNB48S, 3 ms for FNB48/C1).
+  No I/O allowed in this module — keep it that way so tests can assert the
+  full decoder without mocks.
 - `src/fnb58_logger/transport/` — the USB seam.
   - `base.py` defines the `Transport` ABC (`write`, `read`, `close`) plus
     `open_transport(backend)` which tries hidapi first, then pyusb.
@@ -53,8 +53,8 @@ and keeping the CLI thin.
     path requires the device's driver to be WinUSB (via Zadig) because
     Windows' HIDClass driver holds the interface otherwise.
 - `src/fnb58_logger/logger.py` — the runtime loop.
-  - `SampleStream.run()` drives the device: startup writes, 100 ms drain of
-    stale frames, then `read → decode → yield`, periodically re-sending
+  - `SampleStream.run()` drives the device: startup writes with 100 ms
+    spacing, then `read → decode → yield`, periodically re-sending
     `REFRESH`.
   - `run_logger()` wraps the stream: maintains cumulative `energy_Ws` and
     `capacity_As`, the temperature EMA, and writes `Row` objects to a
@@ -66,7 +66,13 @@ and keeping the CLI thin.
 - `src/fnb58_logger/__main__.py` — argparse CLI. Writes CSV to stdout when
   `-o` is absent, to the file otherwise. The status line is sent to
   **stderr** only when writing to a file (stdout is busy with CSV) and only
-  when stderr is a tty — so piping into another tool stays clean.
+  when stderr is a tty — so piping into another tool stays clean. Owns the
+  `--summary` JSON emission and the optional `MarkerReader` lifetime.
+- `src/fnb58_logger/markers.py` — optional UART state-marker reader. Lazy
+  imports pyserial (`markers` extra), runs a background thread, and exposes
+  `current_state()` for `run_logger` to call once per row. Parses
+  `#STATE:NAME` lines case-sensitively; label chars are
+  `[A-Za-z0-9_.\-]{1,32}`.
 
 ## Protocol invariants to preserve
 
@@ -101,7 +107,91 @@ When adding new tests for the runtime loop, follow that pattern.
   exclusively. When diffing against it, expect our CSV columns to differ
   (we use `,` not space, and include derived `power_W`) — do not "fix" to
   match the reference.
+- FNB58 (firmware 1.11) freeze modes observed in the field:
+  - `PROBE_1` and `PROBE_2` appear to be unnecessary for initial
+    initialization and for subsequent `REFRESH`s — the device streams
+    fine without them.
+  - Running the full `PROBE_1 → PROBE_2 → PROBE_2` startup can cause the
+    meter to freeze after several open/close cycles, requiring a
+    power-cycle of the device.
+  - Sending consecutive frames too quickly (back-to-back writes with no
+    gap) can also wedge the FNB58.
+  When touching `startup_sequence()` or the write cadence in
+  `SampleStream.run()`, keep these in mind — err toward fewer probe
+  frames and a small inter-frame delay.
+
+## Power measurement workflow
+
+This repo is used as a test harness for embedded power-consumption work:
+flash firmware → run a scenario on the DUT → capture a labeled trace →
+compare against a baseline tied to a git SHA.
+
+### Recording a run
+
+```bash
+# 30 s run, CSV + JSON summary on stderr (stdout still has CSV)
+fnb58-log -o runs/<sha>-<label>.csv -d 30 --summary
+
+# With a firmware UART emitting `#STATE:NAME` lines
+fnb58-log -o runs/<sha>-<label>.csv -d 30 --summary \
+    --marker-port /dev/ttyUSB0 --marker-baud 115200
+```
+
+Convention: outputs go under `runs/`, named
+`runs/<short-sha>[-dirty]-<label>.csv`. A sibling
+`runs/<short-sha>-<label>.summary.json` carries the one-line summary
+(from `--summary`) and a `.meta.json` carries branch / hostname /
+firmware tags. The `/measure` slash command (see
+`claude-commands/measure.md`) handles all of this.
+
+### --summary JSON shape
+
+```
+{"samples": 3000, "duration_s": 30.0,
+ "mean_V": 3.30000, "min_V": 3.29, "max_V": 3.31,
+ "mean_mA": 12.345, "median_mA": 10.5, "p95_mA": 45.2, "min_mA": 0.01, "max_mA": 80.4,
+ "mean_mW": 40.73, "median_mW": 34.65, "p95_mW": 149.16,
+ "energy_mWh": 0.3394, "charge_mAh": 0.1029,
+ "states": ["DEEP_SLEEP", "RADIO_TX"]}
+```
+
+Everything is in SI-friendly units: mA, mW, mWh, mAh. `samples` is the
+number of decoded 10 ms samples; `duration_s` is `last_t_elapsed -
+first_t_elapsed` (device clock, not wall clock).
+
+### UART state markers
+
+`--marker-port` spawns a background thread that parses lines of the form
+`#STATE:NAME\n` from the serial port. The most recently seen label is
+written to the `state` column of every subsequent CSV row (and tracked in
+`summary.states`). `scripts/compare.py --state NAME` can then restrict
+metrics to just the rows in a given firmware state — use this to compare
+energy-per-state across runs.
+
+The firmware side is trivial: `printf("#STATE:DEEP_SLEEP\r\n")` on entry
+to each state. Don't emit markers faster than you care about — each
+marker has no intrinsic energy cost, but if you print a long banner the
+UART peripheral staying powered for longer will skew the surrounding
+samples.
+
+### CSV state column
+
+The `state` column is always present (14 columns total; see
+`CSV_COLUMNS`). It is empty when `--marker-port` is not used. Any parser
+that reads by column name is unaffected; positional parsers get one more
+trailing field.
+
+### compare.py conventions
+
+`scripts/compare.py baseline.csv candidate.csv` prints a table of
+metrics with absolute and percent change. `--state NAME` restricts to
+that state. `--json` emits machine-readable output for piping. Exit code
+is always 0 — this is a reporting tool, not a CI gate. Energy and
+charge for state-filtered diffs are integrated from the retained rows
+(10 ms each), not read from the cumulative CSV columns, because those
+accumulators are global across the run.
 
 ## Reference
+
 - Upstream: https://github.com/baryluk/fnirsi-usb-power-data-logger
 - Planning docs in repo root: `task_plan.md`, `findings.md`, `progress.md`.

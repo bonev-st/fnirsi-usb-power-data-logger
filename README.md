@@ -11,13 +11,41 @@ fallback, a proper package layout, and pytest coverage.
 
 ## Install
 
+Recommended — works the same on Windows 11 and Linux, no per-machine
+virtualenv to manage:
+
 ```bash
-python -m pip install -e ".[dev]"     # from a clone
-# optional:
-python -m pip install -e ".[pyusb]"   # enables the pyusb fallback backend
+# uv (https://docs.astral.sh/uv/) — installs fnb58-log into a managed venv
+uv tool install .
+
+# or pipx
+pipx install .
+```
+
+From a clone, for development:
+
+```bash
+python -m pip install -e ".[dev]"
+# optional extras:
+python -m pip install -e ".[pyusb]"    # pyusb fallback backend
+python -m pip install -e ".[markers]"  # --marker-port UART state support
 ```
 
 Requires Python 3.10+.
+
+### Claude Code slash commands (optional)
+
+If you drive this with Claude Code, one-time on each machine:
+
+```bash
+# Linux / macOS
+ln -s ../claude-commands .claude/commands
+
+# Windows (no symlink required)
+xcopy /E /I /Y claude-commands .claude\commands
+```
+
+See [`claude-commands/README.md`](claude-commands/README.md) for details.
 
 ## Usage
 
@@ -25,6 +53,8 @@ Requires Python 3.10+.
 fnb58-log                        # CSV to stdout (pipe into anything)
 fnb58-log -o session.csv         # CSV to file; live status line on stderr
 fnb58-log -o session.csv -d 60   # stop after 60 s
+fnb58-log --summary              # one-line JSON metrics at end of run
+fnb58-log --marker-port COM5     # tag samples with firmware #STATE: labels
 fnb58-log --backend pyusb        # force the pyusb backend
 fnb58-log --crc                  # verify CRC-8 on every frame
 fnb58-log -v                     # print device info and warnings
@@ -32,15 +62,30 @@ fnb58-log -v                     # print device info and warnings
 
 Run `fnb58-log -h` for the full flag list.
 
+### Comparing runs
+
+```bash
+python scripts/compare.py baseline.csv candidate.csv
+python scripts/compare.py baseline.csv candidate.csv --state DEEP_SLEEP
+python scripts/compare.py baseline.csv candidate.csv --json
+```
+
+`compare.py` prints a table of mean / median / p95 current and power,
+total energy (mWh) and charge (mAh), and absolute + percent change from
+A to B. With `--state`, the comparison is restricted to rows the
+firmware tagged with that label (via `--marker-port`).
+
 ### CSV columns
 
 `timestamp, t_elapsed, packet, sample, voltage_V, current_A, power_W,
-dp_V, dn_V, temp_C, temp_C_ema, energy_Ws, capacity_As`
+dp_V, dn_V, temp_C, temp_C_ema, energy_Ws, capacity_As, state`
 
 - `timestamp`: absolute seconds since epoch (float).
 - `t_elapsed`: 10 ms-aligned elapsed time from the first sample.
 - `energy_Ws` / `capacity_As`: cumulative since start (Ws, As).
-- `temp_C_ema`: low-pass filter of `temp_C` (α tunable via `--alpha`).
+- `temp_C_ema`: low-pass filter of `temp_C` (α = 0.9).
+- `state`: firmware-reported state from `--marker-port`; empty when
+  unused.
 
 ## Platform notes
 
@@ -49,7 +94,8 @@ dp_V, dn_V, temp_C, temp_C_ema, energy_Ws, capacity_As`
 Default backend (**hidapi**) works with the native HID driver — no Zadig
 needed. If you hit `hid_write/WaitForSingleObject: Overlapped I/O operation
 is in progress`, that's a known cython-hidapi 1.x quirk on Windows. Fall back
-to pyusb:
+to pyusb — full walkthrough at [`docs/zadig-notes.md`](docs/zadig-notes.md).
+Short version:
 
 1. Install [Zadig](https://zadig.akeo.ie/), select the FNB58 interface and
    replace its driver with **WinUSB**.
@@ -59,6 +105,11 @@ to pyusb:
 After the driver swap the device is no longer a normal HID device — to
 restore the FNIRSI default, use Windows Device Manager → *Uninstall device*
 → replug.
+
+```bash
+set PYTHONPATH=src
+.venv/bin/python -m fnb58_logger -v -d 10 --summary
+```
 
 ### Linux
 
@@ -73,6 +124,25 @@ sudo udevadm trigger
 
 Then replug the meter. Both backends should work; hidapi talks to
 `/dev/hidraw*`, pyusb talks to the raw interface.
+
+### FNB58 firmware 1.11 freeze note
+
+On FNB58 (firmware 1.11) the `PROBE_1` and `PROBE_2` frames appear to be
+unnecessary — neither for the initial handshake nor before a subsequent
+`REFRESH`. A few failure modes have been observed:
+
+- Running the full `PROBE_1 → PROBE_2 → PROBE_2` startup can cause the
+  meter to freeze after several startups, requiring a power-cycle of the
+  device.
+- Sending consecutive frames too quickly (too short an interval between
+  writes) can also wedge the FNB58.
+
+If you see the logger lock up across repeated runs, try dropping the
+probes and/or adding a small delay between writes.
+
+```bash
+PYTHONPATH=src .venv/bin/python -m fnb58_logger -v -d 10 --summary
+```
 
 ### Raspberry Pi 4 note
 

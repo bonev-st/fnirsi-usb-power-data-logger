@@ -45,14 +45,8 @@ def test_crc_roundtrip():
 
 # --- Frame builders ----------------------------------------------------------
 
-def test_startup_sequence_fnb58_has_two_probe2():
-    seq = startup_sequence(Model.FNB58)
-    assert seq == [PROBE_1, PROBE_2, PROBE_2]
-
-
-def test_startup_sequence_fnb48_ends_with_refresh():
-    seq = startup_sequence(Model.FNB48)
-    assert seq == [PROBE_1, PROBE_2, REFRESH]
+def test_startup_sequence_ends_with_refresh():
+    assert tuple(startup_sequence()) == (PROBE_1, PROBE_2, REFRESH)
 
 
 def test_refresh_interval_fast_for_fnb48():
@@ -178,14 +172,12 @@ def test_run_logger_emits_csv_rows():
     t = _FakeTransport(frames)
     buf = io.StringIO()
     sink = CsvSink(buf)
-    # 0.3s is generous for the 100ms startup settle + some samples.
-    # drain_max_ms=50 keeps the test fast even though the fake would otherwise
-    # feed frames forever.
-    count = run_logger(t, sink, duration_s=0.3, verify_crc=True, drain_max_ms=50)
+    # Startup sleeps 100 ms per probe frame (3 × 100 ms); add headroom for reads.
+    count = run_logger(t, sink, duration_s=1.0, verify_crc=True)
     sink.close()
 
     # Startup sequence was sent.
-    assert t.writes[:3] == [PROBE_1, PROBE_2, PROBE_2]
+    assert t.writes[:3] == [PROBE_1, PROBE_2, REFRESH]
 
     # At least the 4 samples from that one packet.
     assert count >= 4
@@ -234,27 +226,11 @@ def test_read_timeout_does_not_spam_refresh():
     sink = CsvSink(buf)
     from fnb58_logger.transport import TransportError
     with pytest.raises(TransportError):
-        run_logger(t, sink, drain_max_ms=50, max_consecutive_timeouts=2)
+        run_logger(t, sink, max_consecutive_timeouts=2)
     sink.close()
 
     # Only the three startup writes. No REFRESH-on-timeout spam.
-    assert t.writes == [PROBE_1, PROBE_2, PROBE_2]
-
-
-def test_drain_fifo_runs_on_exit():
-    """run_logger must drain the device IN FIFO in its finally block so the
-    meter doesn't freeze after we disconnect."""
-    t = _TimeoutTransport()
-    buf = io.StringIO()
-    sink = CsvSink(buf)
-    from fnb58_logger.transport import TransportError
-    with pytest.raises(TransportError):
-        run_logger(t, sink, drain_max_ms=50, max_consecutive_timeouts=2)
-    sink.close()
-
-    # The read loop reads at least max_consecutive_timeouts times, then
-    # drain_fifo adds at least one more read on the exception path.
-    assert t.reads_called >= 3
+    assert t.writes == [PROBE_1, PROBE_2, REFRESH]
 
 
 def test_row_as_dict_roundtrip():

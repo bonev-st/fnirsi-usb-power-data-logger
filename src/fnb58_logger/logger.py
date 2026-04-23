@@ -254,17 +254,14 @@ class SampleStream:
         )
         self._max_consecutive_timeouts = max_consecutive_timeouts
 
-    def _warn(self, msg: str) -> None:
-        self._on_warn(msg)
-
     def run(self) -> Iterator[tuple[int, int, Sample]]:
         """Yield (packet_index, sample_index_in_packet, sample)."""
         # Startup — match the reference loggers (baryluk, didim99): write the
         # three probe frames, then sleep 100 ms to let the device's firmware
         # enter its streaming state before we start reading.
-        for frame in startup_sequence(self._t.info.model):
+        for frame in startup_sequence():
             self._t.write(frame)
-        time.sleep(0.1)
+            time.sleep(0.1)
 
         packet_idx = 0
         last_refresh = time.monotonic()
@@ -274,7 +271,7 @@ class SampleStream:
                 try:
                     self._t.write(REFRESH)
                 except Exception as e:
-                    self._warn(f"refresh write failed: {e}")
+                    self._on_warn(f"refresh write failed: {e}")
                 last_refresh = time.monotonic()
 
             # 5 s matches the reference. Do NOT send an extra REFRESH on
@@ -284,7 +281,7 @@ class SampleStream:
             buf = self._t.read(timeout_ms=5000)
             if buf is None:
                 consecutive_timeouts += 1
-                self._warn(
+                self._on_warn(
                     f"read timeout ({consecutive_timeouts}/"
                     f"{self._max_consecutive_timeouts})"
                 )
@@ -298,7 +295,7 @@ class SampleStream:
             try:
                 samples = decode_packet(buf, verify_crc=self._verify_crc)
             except BadPacket as e:
-                self._warn(f"bad packet: {e}")
+                self._on_warn(f"bad packet: {e}")
                 continue
             if samples is None:
                 continue  # non-data frame, keep going
@@ -306,26 +303,6 @@ class SampleStream:
             for i, s in enumerate(samples):
                 yield packet_idx, i, s
             packet_idx += 1
-
-    def drain_fifo(self, max_ms: int = 2000) -> int:
-        """Empty the device's IN FIFO before we close.
-
-        Skipping this is what the didim99 repo's README documents as causing
-        the meter's display to freeze after exit — the device keeps trying
-        to push frames it has queued, and its USB MCU eventually wedges when
-        they have nowhere to go. Returns the number of frames drained.
-        """
-        deadline = time.monotonic() + max_ms / 1000.0
-        drained = 0
-        while time.monotonic() < deadline:
-            try:
-                buf = self._t.read(timeout_ms=1000)
-            except Exception:
-                break  # transport is already dead; nothing we can do.
-            if buf is None:
-                break
-            drained += 1
-        return drained
 
 
 def run_logger(
@@ -339,7 +316,6 @@ def run_logger(
     on_warn=None,
     summary: SummaryAccumulator | None = None,
     state_provider: Callable[[], str] | None = None,
-    drain_max_ms: int = 2000,
     max_consecutive_timeouts: int = 3,
     refresh_period_s: float | None = None,
 ) -> int:
@@ -350,7 +326,6 @@ def run_logger(
       caller can serialise metrics after the run.
     - ``state_provider``: callable returning a short state label (e.g. from an
       external UART reader); written to the ``state`` CSV column.
-    - ``drain_max_ms``: upper bound on the post-run IN FIFO drain. Default 2 s.
     """
     stream = SampleStream(
         transport,
@@ -366,49 +341,38 @@ def run_logger(
     energy = 0.0
     capacity = 0.0
     count = 0
+    get_state = state_provider or (lambda: "")
 
-    try:
-        for packet_idx, sample_idx, s in stream.run():
-            if temp_ema is None:
-                temp_ema = s.temp_c
-            else:
-                temp_ema = alpha * temp_ema + (1.0 - alpha) * s.temp_c
+    for packet_idx, sample_idx, s in stream.run():
+        if temp_ema is None:
+            temp_ema = s.temp_c
+        else:
+            temp_ema = alpha * temp_ema + (1.0 - alpha) * s.temp_c
 
-            energy += s.power * SAMPLE_INTERVAL_S
-            capacity += s.current * SAMPLE_INTERVAL_S
+        energy += s.power * SAMPLE_INTERVAL_S
+        capacity += s.current * SAMPLE_INTERVAL_S
 
-            t_elapsed = packet_idx * PACKET_INTERVAL_S + sample_idx * SAMPLE_INTERVAL_S
-            state = state_provider() if state_provider is not None else ""
-            row = Row(
-                timestamp=t0_wall + t_elapsed,
-                t_elapsed=t_elapsed,
-                packet=packet_idx,
-                sample=sample_idx,
-                s=s,
-                temp_c_ema=temp_ema,
-                energy_ws=energy,
-                capacity_as=capacity,
-                state=state,
-            )
-            sink.write(row)
-            if status is not None:
-                status.update(row)
-            if summary is not None:
-                summary.update(row)
-            count += 1
+        t_elapsed = packet_idx * PACKET_INTERVAL_S + sample_idx * SAMPLE_INTERVAL_S
+        state = get_state()
+        row = Row(
+            timestamp=t0_wall + t_elapsed,
+            t_elapsed=t_elapsed,
+            packet=packet_idx,
+            sample=sample_idx,
+            s=s,
+            temp_c_ema=temp_ema,
+            energy_ws=energy,
+            capacity_as=capacity,
+            state=state,
+        )
+        sink.write(row)
+        if status is not None:
+            status.update(row)
+        if summary is not None:
+            summary.update(row)
+        count += 1
 
-            if duration_s is not None and (time.monotonic() - t0_mono) >= duration_s:
-                break
-    finally:
-        # Always drain the device's IN FIFO before the transport is closed,
-        # even on Ctrl-C, duration expiry, or exception. Without this the
-        # FNB58 frequently wedges and needs a physical replug.
-        try:
-            drained = stream.drain_fifo(max_ms=drain_max_ms)
-            if drained > 0 and on_warn is not None:
-                on_warn(f"drained {drained} trailing frame(s) on exit")
-        except Exception as e:
-            if on_warn is not None:
-                on_warn(f"drain-on-exit failed: {e}")
+        if duration_s is not None and (time.monotonic() - t0_mono) >= duration_s:
+            break
 
     return count

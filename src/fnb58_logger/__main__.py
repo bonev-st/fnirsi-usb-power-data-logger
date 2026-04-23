@@ -33,10 +33,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Stop after N seconds (default: run until Ctrl-C)",
     )
     p.add_argument(
-        "--alpha", type=float, default=0.9,
-        help="Temperature EMA smoothing factor 0<alpha<=1 (default: 0.9)",
-    )
-    p.add_argument(
         "--crc", action="store_true",
         help="Verify the CRC-8 of each incoming frame (default: off)",
     )
@@ -72,9 +68,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--refresh-ms", type=float, default=None,
         help=(
-            "REFRESH write cadence in ms. Default is 3 ms for all models "
-            "(required for FNB58 firmware ≥V0.68 to avoid device wedge). "
-            "Override only if you know what you're doing."
+            "REFRESH write cadence in ms. Default: 1000 for FNB58/FNB48S, "
+            "3 for FNB48/C1. Override only if you know what you're doing."
         ),
     )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -93,10 +88,6 @@ def _install_sigint_handler() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-
-    if not (0.0 < args.alpha <= 1.0):
-        print("error: --alpha must be in (0, 1]", file=sys.stderr)
-        return 2
 
     _install_sigint_handler()
 
@@ -164,7 +155,6 @@ def main(argv: list[str] | None = None) -> int:
                 status=status,
                 verify_crc=args.crc,
                 duration_s=args.duration,
-                alpha=args.alpha,
                 on_warn=warn,
                 summary=summary,
                 state_provider=state_provider,

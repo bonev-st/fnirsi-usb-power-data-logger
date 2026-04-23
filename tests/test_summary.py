@@ -153,10 +153,9 @@ def test_run_logger_writes_state_column_via_state_provider():
     summary = SummaryAccumulator()
     state = {"v": "BOOT"}
     run_logger(
-        t, sink, duration_s=0.25,
+        t, sink, duration_s=1.0,
         summary=summary,
         state_provider=lambda: state["v"],
-        drain_max_ms=50,
     )
     sink.close()
 

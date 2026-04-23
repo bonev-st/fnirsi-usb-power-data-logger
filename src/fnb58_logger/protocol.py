@@ -65,30 +65,16 @@ PROBE_1 = _frame(0x81)          # AA 81 .. 8E
 PROBE_2 = _frame(0x82)          # AA 82 .. 96
 REFRESH = _frame(0x83)          # AA 83 .. 9E
 
+STARTUP_SEQUENCE: tuple[bytes, ...] = (PROBE_1, PROBE_2, REFRESH)
 
-def startup_sequence(model: Model) -> list[bytes]:
+
+def startup_sequence() -> tuple[bytes, ...]:
     """Frames to send, in order, after opening the device."""
-    seq = [PROBE_1, PROBE_2]
-    if model in (Model.FNB58, Model.FNB48S):
-        seq.append(PROBE_2)
-    else:  # FNB48, C1
-        seq.append(REFRESH)
-    return seq
+    return STARTUP_SEQUENCE
 
 
 def refresh_interval_s(model: Model) -> float:
-    """How often to re-send REFRESH to keep the stream flowing.
-
-    Default mirrors baryluk's reference: 1 s for FNB58/FNB48S, 3 ms for
-    FNB48/C1. The "3 ms for everything" variant suggested by upstream
-    issue #19 helps some Windows setups but **overwhelms the Pi 4's VL805
-    xHCI USB-2 companion** on Linux (333 writes/s trips the TT, the kernel
-    resets the port, VL805 gets wedged). Users on the ≥V0.68 firmware who
-    see the old 1 s cadence wedge the meter can override this with
-    ``--refresh-ms 3`` from the CLI.
-
-    https://github.com/baryluk/fnirsi-usb-power-data-logger/issues/19
-    """
+    # 1 s for FNB58/FNB48S — 3 ms floods the Pi 4 VL805 TT and wedges the port.
     if model in (Model.FNB58, Model.FNB48S):
         return 1.0
     return 0.003

@@ -29,7 +29,8 @@ dependencies = [
 
 [project.optional-dependencies]
 pyusb = ["pyusb>=1.2"]
-dev = ["pytest>=8", "ruff>=0.5"]
+markers = ["pyserial>=3.5"]
+dev = ["pytest>=8", "ruff>=0.5", "pyserial>=3.5"]
 
 [project.scripts]
 fnb58-log = "fnb58_logger.__main__:main"

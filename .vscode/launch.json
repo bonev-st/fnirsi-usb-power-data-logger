@@ -1,0 +1,43 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "fnb58-log (auto backend)",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "fnb58_logger",
+			"cwd": "${workspaceFolder}",
+			"console": "integratedTerminal",
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/src"
+			},
+			"args": [
+				"-o",
+				"${workspaceFolder}/debug.csv",
+				"-v",
+				"--duration",
+				"5"
+			]
+		},
+		{
+			"name": "fnb58-log (pyusb backend)",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "fnb58_logger",
+			"cwd": "${workspaceFolder}",
+			"console": "integratedTerminal",
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/src"
+			},
+			"args": [
+				"--backend",
+				"pyusb",
+				"-o",
+				"${workspaceFolder}/debug.csv",
+				"-v",
+				"--duration",
+				"5"
+			]
+		}
+	]
+}
