@@ -6,6 +6,14 @@ tested on real hardware (FNB58, Windows, local mode) 2026-10-11.
 
 Author: Claude (plan mode), 2026-04-23.
 
+v3 changelog (2026-10-11):
+- §4/§15: `install_skills.py` drops symlink mode. Installed SKILL.md
+  copies get `python scripts/power_*.py` rewritten to the installer's
+  interpreter + the logger repo's absolute `scripts/` path; the
+  relative paths only resolved when Claude Code ran inside this repo,
+  so user-scoped skills could not find the scripts from a firmware
+  repo. `scenarios/`, `runs/` and the git SHA stay cwd-relative.
+
 v2 changelog (2026-04-23):
 - §2/§3/§4: added `scripts/install_skills.py`, `scripts/power_host.py`,
   `scripts/power_sync.py`, `/power-host` skill, `--host` flag on run/optimize.
@@ -418,32 +426,29 @@ usage: power_host.py list
 ### scripts/install_skills.py
 
 ```
-usage: install_skills.py [--target user|project|PATH] [--mode symlink|copy]
-                        [--uninstall] [--dry-run]
+usage: install_skills.py [--target user|project|PATH] [--uninstall] [--dry-run]
 ```
 
 - `--target user` (default): installs to `~/.claude/skills/power-*` so
   the Skills work from any directory on this machine.
 - `--target project`: installs to `<repo>/.claude/skills/power-*`
-  (normally a no-op since the repo already contains the source, but
-  handy for symlink-on-Unix setups where the repo was exported
-  without the dir).
+  (normally a no-op since the repo already contains the source).
 - `--target PATH`: install into an explicit directory (tests use this).
-- `--mode symlink`: uses POSIX symlinks or Windows directory junctions
-  (`mklink /J`). Falls back to `copy` and warns when symlinks aren't
-  available (e.g., Windows without developer mode).
-- `--mode copy` (default on Windows): recursive copy with `shutil.copytree`,
-  overwriting by default. Records a tiny `.installed-from`
-  file in each copied skill dir pointing at the repo source path, so a
-  subsequent `--uninstall` is safe (won't delete user-authored dirs).
+- Always a recursive copy (`shutil.copytree`), refreshed on re-run. In
+  each copied SKILL.md, `python scripts/<X>.py` is rewritten to
+  `<sys.executable> <repo>/scripts/<X>.py` so the skill works from any
+  cwd (v3; symlink mode removed because a symlink can't carry the
+  rewrite). Warns if that interpreter has neither `hid` nor `usb`.
+  Legacy symlink installs pointing at this repo are replaced.
+- Records a tiny `.installed-from` file in each copied skill dir
+  pointing at the repo source path, so a subsequent `--uninstall` is
+  safe (won't delete user-authored dirs).
 - `--uninstall`: removes only the `power-*` skill dirs it previously
-  installed (guarded by `.installed-from`).
+  installed (guarded by `.installed-from`; legacy symlinks unlinked).
 - `--dry-run`: prints what it would do.
-- Idempotent: running twice is a no-op when nothing changed.
+- Idempotent: running twice leaves the same result.
 
 Cross-platform details:
-- On Windows, use `os.symlink` only with `target_is_directory=True`
-  and wrap in try/except; on PermissionError drop to copy mode.
 - Line endings: skills are UTF-8 text — no CRLF rewriting needed, Git's
   `core.autocrlf` is upstream of us.
 
@@ -604,7 +609,7 @@ every wrapper. The repo's real `runs/` is never touched.
    command, temp CSV path). No actual SSH. This proves the remote-exec
    code path is wired end-to-end without needing a real remote host.
 10. `test_install_skills_idempotent` — run `install_skills.py
-    --target <tmp> --mode copy` twice, assert second call is a no-op,
+    --target <tmp>` twice, assert second call is a no-op,
     assert `.installed-from` sentinel exists, then `--uninstall` and
     assert skill dirs are gone while unrelated sibling dirs are
     preserved.
@@ -676,7 +681,7 @@ Explicitly forbidden:
 | SSH alias not in `~/.ssh/config` on the invoking machine | `power_host probe` surfaces the failure early. `power_run --host X` on an unresolvable alias exits 3 with `ssh: could not resolve hostname` passed through to stderr. No implicit fallback to local — silent host-swap would be worse than a failure. |
 | Remote repo drift (remote has an older `fnb58-log` than local code) | Out of band: `scripts/power_sync.py` handles this if shipped; otherwise documented in `docs/remote-setup.md`. Meta sidecar records the host alias so post-hoc diagnosis is possible. The `fnb58-log --version` output on the remote could be recorded in meta — added to the plan as a nice-to-have, not a gate. |
 | Summary JSON mixed with fnb58-log's own stderr over SSH | `fnb58-log -o <file> --summary` puts the summary on **stdout** (per `__main__.py:177-182` when `writing_to_file` is true); stderr carries device info and warnings. We capture stdout cleanly via `ssh ... "cmd"`. Verified by reading `__main__.py` before finalizing this plan. |
-| Symlink creation blocked on Windows (no developer mode) | `install_skills.py` catches `OSError`/`PermissionError`, drops to `--mode copy`, and prints a one-line note. The resulting install is functionally identical. |
+| Installed skills can't find `scripts/` outside the logger repo | (v3) installer always copies and rewrites `python scripts/power_*.py` to absolute paths; `test_install_skills_rewrites_script_paths_for_other_repos` runs the rewritten command from an unrelated cwd. |
 | Host config file contains secrets (some users add passphrases or paths) | Config lives under `~/.claude/` by default and is never committed. The example at `docs/examples/fnb58-power.example.json` contains no secrets. `.claude/fnb58-power.local.json` is git-ignored. |
 
 ## 12. Acceptance criteria
@@ -691,7 +696,7 @@ Explicitly forbidden:
       skill surfaces the failing checks verbatim.
 - [ ] `git diff src/` fits on one screen (ideally empty).
 - [ ] `scripts/install_skills.py --target <tmp>` produces a usable
-      skill tree in both symlink and copy modes; `--uninstall` cleanly
+      skill tree (copies with absolute script paths); `--uninstall` cleanly
       reverses it; second install is a no-op.
 - [ ] `scripts/power_host.py list` on a bare machine (no config file)
       exits 0 and prints an empty host set.
@@ -748,18 +753,13 @@ other copy is derived. This means:
    cwd): `scripts/install_skills.py --target user` mirrors the skills
    into `~/.claude/skills/`. Idempotent; reversible via `--uninstall`.
 
-### Mode selection
+### Install mode (v3)
 
-| OS              | Default `--mode` | Notes                                            |
-|-----------------|------------------|--------------------------------------------------|
-| Linux           | `symlink`        | symlinks to the repo path — changes live-apply.  |
-| macOS           | `symlink`        | same as Linux.                                   |
-| Windows (dev)   | `symlink`        | uses `mklink /J` junctions (no admin required).  |
-| Windows (plain) | `copy`           | recursive copy; re-run after edits.              |
-
-The script auto-detects Windows developer mode via a trial
-`os.symlink` call in `tmp_path`; on `OSError` it falls back to `copy`
-and prints a one-line note.
+Copy only, on every OS. The v2 symlink mode was removed: the repo's
+SKILL.md files use `python scripts/power_*.py`, which only resolves
+with the logger repo as cwd, so user-scoped copies must have those
+commands rewritten to absolute paths — impossible through a symlink.
+Re-run the installer after `git pull` to refresh.
 
 ### Uninstall safety
 

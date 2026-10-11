@@ -367,27 +367,49 @@ def test_install_skills_idempotent(tmp_path: Path):
     (hand / "SKILL.md").write_text("---\nname: hand-made\n---\nhi\n",
                                      encoding="utf-8")
 
-    # First install (force copy mode so the test works on any OS).
-    _py(str(SCRIPTS / "install_skills.py"),
-        "--target", str(target), "--mode", "copy")
+    # First install.
+    _py(str(SCRIPTS / "install_skills.py"), "--target", str(target))
     installed_power_measure = target / "power-measure"
     assert installed_power_measure.is_dir()
     sentinel = installed_power_measure / ".installed-from"
     assert sentinel.is_file()
 
-    # Second install is a no-op (may re-copy but must keep sentinel).
-    p2 = _py(str(SCRIPTS / "install_skills.py"),
-             "--target", str(target), "--mode", "copy")
+    # Second install refreshes the copy and keeps the sentinel.
+    p2 = _py(str(SCRIPTS / "install_skills.py"), "--target", str(target))
     assert installed_power_measure.is_dir()
     assert sentinel.is_file()
-    assert "copy" in p2.stdout or "noop" in p2.stdout
+    assert "copy" in p2.stdout
 
     # Uninstall removes managed dirs, preserves hand-made.
-    _py(str(SCRIPTS / "install_skills.py"),
-        "--target", str(target), "--mode", "copy", "--uninstall")
+    _py(str(SCRIPTS / "install_skills.py"), "--target", str(target),
+        "--uninstall")
     assert not installed_power_measure.exists()
     assert hand.is_dir()
     assert (hand / "SKILL.md").is_file()
+
+
+def test_install_skills_rewrites_script_paths_for_other_repos(tmp_path: Path):
+    # Regression: installed skills said "python scripts/power_*.py", which
+    # does not exist when Claude Code runs in a firmware repo.
+    target = tmp_path / "skills"
+    _py(str(SCRIPTS / "install_skills.py"), "--target", str(target))
+    text = (target / "power-host" / "SKILL.md").read_text(encoding="utf-8")
+    assert "python scripts/" not in text
+    cmd_line = next(line.strip() for line in text.splitlines()
+                    if "power_host.py" in line and "<subcommand>" in line)
+    python, script = cmd_line.split()[:2]
+    assert Path(script) == SCRIPTS / "power_host.py"
+
+    # The rewritten command works from an unrelated cwd.
+    other = tmp_path / "firmware"
+    other.mkdir()
+    empty = tmp_path / "empty.json"
+    empty.write_text('{"hosts": {}, "default_host": null}', encoding="utf-8")
+    p = subprocess.run([python, script, "list", "--json",
+                        "--host-config", str(empty)],
+                       capture_output=True, text=True, cwd=other)
+    assert p.returncode == 0, p.stderr
+    assert json.loads(p.stdout)["hosts"] == {}
 
 
 # --------------------------------------------------------------------------

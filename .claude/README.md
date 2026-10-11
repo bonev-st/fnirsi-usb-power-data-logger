@@ -30,24 +30,28 @@ automatically. Invoke them as `/power-<name> <args>`.
 
 ### Optional: install Skills user-globally
 
-If you want `/power-*` available from repos other than this one, mirror
-the skill tree into `~/.claude/skills/`:
+If you want `/power-*` available from repos other than this one (e.g.
+your firmware project), copy the skill tree into `~/.claude/skills/`.
+Run the installer with the Python you used for `pip install -e .` —
+the installed skills will run the scripts with that interpreter:
 
 ```bash
-python scripts/install_skills.py             # symlink on Unix, copy on Windows
-python scripts/install_skills.py --mode copy  # force copy on Unix
+python scripts/install_skills.py              # install / refresh
+python scripts/install_skills.py --dry-run    # preview
 python scripts/install_skills.py --uninstall  # reverses the install safely
 ```
 
-The install is idempotent. Every installed skill dir gets an
-`.installed-from` sentinel; `--uninstall` refuses to delete skills that
-lack it, so your hand-authored skills next door are safe.
+Installed copies have `python scripts/power_*.py` rewritten to this
+interpreter and this repo's absolute `scripts/` path, so they work from
+any working directory. `scenarios/`, `runs/` and the git SHA still come
+from the repo Claude Code is running in — keep your scenarios in the
+firmware repo and the runs are named after the firmware commit.
 
-### Windows symlinks
-
-On Windows without developer mode, `symlink` will fail and the installer
-drops to `copy` automatically (the fallback prints one line of note).
-You can force copy with `--mode copy`.
+Installs are always copies (a symlink can't carry the rewritten paths):
+**re-run the installer after `git pull`** to pick up skill changes.
+Re-running is safe and refreshes managed copies. Every installed skill
+dir gets an `.installed-from` sentinel; `--uninstall` refuses to delete
+skills that lack it, so your hand-authored skills next door are safe.
 
 ## Remote FNB58 access over SSH
 
