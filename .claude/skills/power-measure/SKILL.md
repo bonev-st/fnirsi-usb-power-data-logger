@@ -16,7 +16,8 @@ under `runs/` with names tied to the current git state.
 2. Forward everything to the wrapper. The wrapper owns all side effects.
    ```bash
    python scripts/power_run.py --scenario scenarios/<name>.json \
-       [--label <L>] [--host <ALIAS>] [--replay <PATH>]        [--target-board <B>] [--meta <K=V> ...]
+       [--label <L>] [--host <ALIAS>] [--replay <PATH>] \
+       [--target-board <B>] [--meta <K=V> ...]
    ```
    Pass `--marker-port` / `--marker-baud` through if the user supplied
    them. Likewise `--target-board <NAME>` and `--meta KEY=VALUE`
