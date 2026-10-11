@@ -1,7 +1,7 @@
 ---
 name: power-measure
 description: Record a labeled FNB58 power run for a scenario, save CSV + summary.json + meta.json under runs/.
-argument-hint: <scenario> [--label L] [--host ALIAS] [--replay PATH]
+argument-hint: <scenario> [--label L] [--host ALIAS] [--replay PATH] [--target-board B] [--meta K=V]
 ---
 
 Record a power-measurement run for the named scenario and save artifacts
@@ -16,10 +16,13 @@ under `runs/` with names tied to the current git state.
 2. Forward everything to the wrapper. The wrapper owns all side effects.
    ```bash
    python scripts/power_run.py --scenario scenarios/<name>.json \
-       [--label <L>] [--host <ALIAS>] [--replay <PATH>]
+       [--label <L>] [--host <ALIAS>] [--replay <PATH>]        [--target-board <B>] [--meta <K=V> ...]
    ```
    Pass `--marker-port` / `--marker-baud` through if the user supplied
-   them. Do not add flags the user didn't ask for.
+   them. Likewise `--target-board <NAME>` and `--meta KEY=VALUE`
+   (repeatable): use them to record what is actually on the DUT when it
+   differs from the current git state, e.g. `--meta firmware=<sha>` after
+   flashing an older build. Do not add flags the user didn't ask for.
 
 3. Read the JSON that `power_run.py` prints on stdout. Surface it to
    the user along with the concrete paths from the returned object

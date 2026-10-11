@@ -86,6 +86,13 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="Override scenario.marker_port")
     p.add_argument("--marker-baud", default=None, type=int,
                    help="Override scenario.marker_baud")
+    p.add_argument("--target-board", default=None,
+                   help="Board under test, recorded in meta.json (default: $TARGET_BOARD)")
+    p.add_argument("--meta", action="append", default=[], metavar="KEY=VALUE",
+                   help="Extra metadata recorded in meta.json, the index and the "
+                        "stability rollup under 'extra' (repeatable), e.g. the "
+                        "firmware build that was flashed when it differs from the "
+                        "current git state")
     p.add_argument("--out-dir", "--runs-dir", dest="out_dir",
                    default=Path("runs"), type=Path,
                    help="Where to write CSV/meta/summary/index (default: runs/)")
@@ -321,7 +328,19 @@ def _spawn_capture_summary(
 # ---------------------------------------------------------------------------
 
 
-_ROLLUP_METRICS = ("mean_mA", "p95_mA", "energy_mWh")
+# mW metrics matter when the DUT is fed through a converter: power, not current,
+# is what carries over to a different supply voltage.
+_ROLLUP_METRICS = ("mean_mA", "median_mA", "p95_mA", "mean_mW", "median_mW", "energy_mWh")
+
+
+def _parse_meta(pairs: list[str]) -> dict[str, str]:
+    extra: dict[str, str] = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep or not key.strip():
+            die(EXIT_USAGE, f"--meta expects KEY=VALUE, got {pair!r}")
+        extra[key.strip()] = value.strip()
+    return extra
 
 
 def _stability_stats(summaries: list[dict[str, Any]]) -> dict[str, Any]:
@@ -355,6 +374,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
     scenario = load_scenario(args.scenario)
+    extra = _parse_meta(args.meta)
     label = args.label or scenario["name"]
     out_dir: Path = args.out_dir
     repetitions = int(scenario["repetitions"])
@@ -384,7 +404,8 @@ def main(argv: list[str] | None = None) -> int:
         "dirty": sha.endswith("-dirty"),
         "branch": branch,
         "hostname": hostname(),
-        "target_board": os.environ.get("TARGET_BOARD"),
+        "target_board": args.target_board or os.environ.get("TARGET_BOARD"),
+        "extra": extra,
         "fnb58_log_args": ["-d", str(scenario["duration_s"]), "--summary"],
         "total_repetitions": repetitions,
         "replay": str(args.replay) if args.replay else None,
@@ -433,6 +454,7 @@ def main(argv: list[str] | None = None) -> int:
                 "timestamp_utc": meta["timestamp_utc"],
                 "repetition_index": meta["repetition_index"],
                 "host": (host.get("alias") if host else None),
+                "extra": extra,
             })
             summaries.append(plan["summary"])
 
@@ -473,6 +495,8 @@ def main(argv: list[str] | None = None) -> int:
         "branch": branch,
         "repetitions": repetitions,
         "runs": [str(p["summary_json"]) for p in plans],
+        "target_board": common_meta["target_board"],
+        "extra": extra,
         "stats": _stability_stats(summaries),
     }
     atomic_write_json(stability_path(base), rollup)

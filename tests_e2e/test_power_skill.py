@@ -78,6 +78,45 @@ def test_power_run_replay_writes_expected_files(tmp_path: Path):
         assert row["host"] is None
 
 
+def test_power_run_records_meta_and_power_rollup(tmp_path: Path):
+    out = tmp_path / "runs"
+    _py(
+        str(SCRIPTS / "power_run.py"),
+        "--scenario", str(SCENARIOS / "deep_sleep.json"),
+        "--replay", str(FIXTURES / "good_deep_sleep.csv"),
+        "--out-dir", str(out),
+        "--label", "tagged",
+        "--target-board", "xiao-esp32s3",
+        "--meta", "firmware=abc123",
+        "--meta", "variant = no light sleep",
+    )
+    expected = {"firmware": "abc123", "variant": "no light sleep"}
+    for meta_path in out.glob("*-tagged-r*.meta.json"):
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        assert meta["target_board"] == "xiao-esp32s3"
+        assert meta["extra"] == expected
+    for line in (out / "index.jsonl").read_text(encoding="utf-8").splitlines():
+        assert json.loads(line)["extra"] == expected
+    stab = json.loads(next(out.glob("*-tagged.stability.json")).read_text(encoding="utf-8"))
+    assert stab["extra"] == expected
+    assert stab["target_board"] == "xiao-esp32s3"
+    for metric in ("mean_mA", "median_mA", "p95_mA", "mean_mW", "median_mW", "energy_mWh"):
+        assert metric in stab["stats"], metric
+
+
+def test_power_run_rejects_malformed_meta(tmp_path: Path):
+    p = _py(
+        str(SCRIPTS / "power_run.py"),
+        "--scenario", str(SCENARIOS / "deep_sleep.json"),
+        "--replay", str(FIXTURES / "good_deep_sleep.csv"),
+        "--out-dir", str(tmp_path / "runs"),
+        "--meta", "no-equals-sign",
+        expect_zero=False,
+    )
+    assert p.returncode == 2
+    assert "KEY=VALUE" in p.stderr
+
+
 # --------------------------------------------------------------------------
 # 2. validate good vs good-baseline → PASS
 # --------------------------------------------------------------------------
