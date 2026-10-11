@@ -119,6 +119,15 @@ When adding new tests for the runtime loop, follow that pattern.
   When touching `startup_sequence()` or the write cadence in
   `SampleStream.run()`, keep these in mind — err toward fewer probe
   frames and a small inter-frame delay.
+- FNB58 firmware 1.15 (local Windows meter updated 2026-10-11; hidapi
+  reports `2e3c:5558`, release `0x0200`): no protocol change observed.
+  With the current startup (`PROBE_1 → PROBE_2 → REFRESH`, 100 ms
+  spacing) and 1 s `REFRESH` cadence it streamed 100 samples/s with no
+  frame gaps or CRC errors (10 s `--crc`, 60 s long run), survived 13
+  opens including 6 back-to-back open/close cycles, and read the same
+  current as on 1.11 (median within 0.3 %). The 1.11 freeze triggers
+  above (`PROBE_2 → PROBE_2` startup, zero-gap writes) were **not**
+  re-tested on 1.15 — treat them as still applicable.
 
 ## Power measurement workflow
 

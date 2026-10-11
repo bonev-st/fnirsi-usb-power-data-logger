@@ -141,6 +141,14 @@ probes and/or adding a small delay between writes.
 PYTHONPATH=src .venv/bin/python -m fnb58_logger -v -d 10 --summary
 ```
 
+**Firmware 1.15:** no protocol change observed. With the default startup
+(`PROBE_1 → PROBE_2 → REFRESH`, 100 ms apart) and 1 s `REFRESH` cadence,
+an FNB58 on 1.15 streamed 100 samples/s with no dropped frames or CRC
+errors (including a 60 s run), survived repeated back-to-back
+open/close cycles, and read the same current as on 1.11. The 1.11
+freeze triggers above were not re-tested on 1.15, so the advice still
+applies.
+
 ### Raspberry Pi 4 note
 
 The VL805 xHCI controller that drives all four external USB ports on the
