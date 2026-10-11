@@ -141,8 +141,9 @@ Convention: outputs go under `runs/`, named
 `runs/<short-sha>[-dirty]-<label>.csv`. A sibling
 `runs/<short-sha>-<label>.summary.json` carries the one-line summary
 (from `--summary`) and a `.meta.json` carries branch / hostname /
-firmware tags. The `/measure` slash command (see
-`claude-commands/measure.md`) handles all of this.
+firmware tags. The `/power-measure` skill (`.claude/skills/`, wrapping
+`scripts/power_run.py`) handles all of this; `claude-commands/` is
+deprecated.
 
 ### --summary JSON shape
 

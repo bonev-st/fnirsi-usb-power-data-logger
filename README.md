@@ -33,19 +33,16 @@ python -m pip install -e ".[markers]"  # --marker-port UART state support
 
 Requires Python 3.10+.
 
-### Claude Code slash commands (optional)
+### Claude Code skills (optional)
 
-If you drive this with Claude Code, one-time on each machine:
-
-```bash
-# Linux / macOS
-ln -s ../claude-commands .claude/commands
-
-# Windows (no symlink required)
-xcopy /E /I /Y claude-commands .claude\commands
-```
-
-See [`claude-commands/README.md`](claude-commands/README.md) for details.
+Claude Code picks up the `/power-measure`, `/power-validate`,
+`/power-baseline`, `/power-compare` and `/power-host` skills from
+`.claude/skills/` automatically when launched in this repo.
+Step-by-step setup and firmware workflow:
+[`docs/power-skills-guide.md`](docs/power-skills-guide.md). See
+[`.claude/README.md`](.claude/README.md) for user-global install and
+[`scenarios/README.md`](scenarios/README.md) for scenario files. The
+older `claude-commands/` prompt templates are deprecated.
 
 ## Usage
 

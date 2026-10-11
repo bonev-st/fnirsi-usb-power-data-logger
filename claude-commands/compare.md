@@ -3,6 +3,12 @@ description: Diff two fnb58-log CSV runs and summarize the change.
 argument-hint: <baseline.csv> <candidate.csv> [--state NAME]
 ---
 
+> **DEPRECATED.** This prompt template is superseded by the
+> `/power-compare` Skill under `.claude/skills/`. It is retained here
+> as historical reference and will be removed once external users have
+> migrated. Do not add features here.
+
+
 Compare two power-measurement runs and explain the delta.
 
 ## What to do

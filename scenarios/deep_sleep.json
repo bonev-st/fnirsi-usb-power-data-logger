@@ -1,0 +1,30 @@
+{
+  "name": "deep_sleep",
+  "description": "DUT in DEEP_SLEEP mode; expect <0.1 mA mean and <0.08 mA p95.",
+  "duration_s": 30,
+  "min_duration_s": 25,
+  "repetitions": 3,
+  "expected_states": ["DEEP_SLEEP"],
+  "marker_port": "env:MARKER_PORT",
+  "marker_baud": 115200,
+  "budgets": {
+    "overall": {
+      "max_mean_mA": 0.10,
+      "max_energy_mWh": 0.20
+    },
+    "per_state": {
+      "DEEP_SLEEP": {
+        "max_p95_mA": 0.08,
+        "max_mean_mA": 0.05
+      }
+    }
+  },
+  "regression": {
+    "max_mean_mA_regression_pct": 3.0,
+    "max_p95_mA_regression_pct": 8.0,
+    "max_energy_mWh_regression_pct": 3.0
+  },
+  "default_host": null,
+  "build_cmd": null,
+  "flash_cmd": null
+}

@@ -1,0 +1,18 @@
+{
+  "default_host": null,
+  "hosts": {
+    "test-pi": {
+      "ssh_alias": "test-system",
+      "remote_repo": "~/fnb58-logger",
+      "fnb58_log_cmd": "~/fnb58-logger/.venv/bin/fnb58-log",
+      "remote_tmp_dir": "/tmp",
+      "python_cmd": "~/fnb58-logger/.venv/bin/python"
+    },
+    "lab-linux": {
+      "ssh_alias": "lab-linux",
+      "remote_repo": "~/work/fnb58-logger",
+      "fnb58_log_cmd": "fnb58-log",
+      "remote_tmp_dir": "/tmp"
+    }
+  }
+}

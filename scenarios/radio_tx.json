@@ -1,0 +1,33 @@
+{
+  "name": "radio_tx",
+  "description": "Active radio TX burst at 0 dBm; bounded average draw, bounded peak.",
+  "duration_s": 10,
+  "min_duration_s": 8,
+  "repetitions": 3,
+  "expected_states": ["IDLE", "RADIO_TX"],
+  "marker_port": "env:MARKER_PORT",
+  "marker_baud": 115200,
+  "budgets": {
+    "overall": {
+      "max_mean_mA": 8.0,
+      "max_energy_mWh": 0.40
+    },
+    "per_state": {
+      "RADIO_TX": {
+        "max_p95_mA": 20.0,
+        "max_max_mA": 35.0
+      },
+      "IDLE": {
+        "max_mean_mA": 2.0
+      }
+    }
+  },
+  "regression": {
+    "max_mean_mA_regression_pct": 5.0,
+    "max_p95_mA_regression_pct": 10.0,
+    "max_energy_mWh_regression_pct": 5.0
+  },
+  "default_host": null,
+  "build_cmd": null,
+  "flash_cmd": null
+}

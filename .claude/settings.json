@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'grep -Eq \"\\\"prompt\\\"[[:space:]]*:[[:space:]]*\\\"[[:space:]]*/power-(measure|optimize|validate)\" || exit 0; if [ -n \"$(git status --porcelain 2>/dev/null)\" ]; then echo \"note: working tree is dirty — run will be labeled -dirty\"; fi'"
+          }
+        ]
+      }
+    ]
+  }
+}
