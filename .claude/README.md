@@ -23,6 +23,10 @@ When Claude Code is launched with the repo as its working directory,
 every `<skill>/SKILL.md` under `.claude/skills/` is loaded
 automatically. Invoke them as `/power-<name> <args>`.
 
+For a step-by-step walkthrough (install, firmware repo setup,
+baseline → validate workflow, troubleshooting) see
+[`../docs/power-skills-guide.md`](../docs/power-skills-guide.md).
+
 ## Multi-machine workflow
 
 `.claude/skills/` is the single source of truth — no per-machine edits.

@@ -37,7 +37,9 @@ Requires Python 3.10+.
 
 Claude Code picks up the `/power-measure`, `/power-validate`,
 `/power-baseline`, `/power-compare` and `/power-host` skills from
-`.claude/skills/` automatically when launched in this repo. See
+`.claude/skills/` automatically when launched in this repo.
+Step-by-step setup and firmware workflow:
+[`docs/power-skills-guide.md`](docs/power-skills-guide.md). See
 [`.claude/README.md`](.claude/README.md) for user-global install and
 [`scenarios/README.md`](scenarios/README.md) for scenario files. The
 older `claude-commands/` prompt templates are deprecated.
