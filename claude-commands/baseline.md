@@ -3,6 +3,12 @@ description: Mark the current fnb58-log run as the baseline for this branch.
 argument-hint: [run_csv]
 ---
 
+> **DEPRECATED.** This prompt template is superseded by the
+> `/power-baseline` Skill under `.claude/skills/`. It is retained here
+> as historical reference and will be removed once external users have
+> migrated. Do not add features here.
+
+
 Record the "baseline" pointer for the current branch so subsequent
 `/compare` calls can default one side.
 

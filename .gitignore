@@ -10,7 +10,12 @@ venv/
 .ruff_cache/
 *.csv
 !tests/**/*.csv
+!tests_e2e/fixtures/*.csv
 findings.md
 progress.md
 task_plan.md
 /demo/
+/runs/*
+!/runs/.gitkeep
+/.claude/fnb58-power.local.json
+/.claude/settings.local.json

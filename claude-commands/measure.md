@@ -3,6 +3,12 @@ description: Record a labeled power-measurement run with the FNB58.
 argument-hint: <label> [duration_s] [extra fnb58-log args]
 ---
 
+> **DEPRECATED.** This prompt template is superseded by the
+> `/power-measure` Skill under `.claude/skills/`. It is retained here
+> as historical reference and will be removed once external users have
+> migrated. Do not add features here.
+
+
 Record a power-measurement run and save it under `runs/` with a filename
 that ties the capture to the current git state.
 
